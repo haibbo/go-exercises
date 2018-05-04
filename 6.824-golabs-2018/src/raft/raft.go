@@ -121,7 +121,7 @@ func (rf *Raft) persist() {
 	e.Encode(rf.log)
 	data := w.Bytes()
 	rf.persister.SaveRaftState(data)
-	DPrintf("[%d:%d] Save %d %d %v", rf.me, rf.currentTerm, rf.currentTerm, rf.votedFor, rf.log)
+	DPrintf("[%d:%d] Save %d %d ...", rf.me, rf.currentTerm, rf.currentTerm, rf.votedFor)
 }
 
 //
@@ -169,8 +169,9 @@ type AppendEntriesArgs struct {
 //  AppendEntries RPC reply stucture
 //
 type AppendEntriesReply struct {
-	Term    int  //currentTerm, for leader to update itself
-	Success bool //true if follower contained entry matching PrevLogIndex and prevLogTerm
+	Term      int  //currentTerm, for leader to update itself
+	Success   bool //true if follower contained entry matching PrevLogIndex and prevLogTerm
+	NextIndex int  // only used when Success is false
 }
 
 func (rf *Raft) GetLastLogTermIndex() (int, int) {
@@ -211,6 +212,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if len(rf.log)-1 < args.PrevLogIndex {
 		reply.Term = rf.currentTerm
 		reply.Success = false
+		reply.NextIndex = len(rf.log)
 		DPrintf("[%d:%d] AppendEntries return false %d %d ", rf.me, rf.currentTerm, len(rf.log), args.PrevLogIndex)
 		return
 	}
@@ -218,6 +220,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
 	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
 		DPrintf("[%d:%d] local log %d's term %d is not same request term %d", rf.me, rf.currentTerm, args.PrevLogIndex, rf.log[args.PrevLogIndex].Term, args.PrevLogTerm)
+		reply.NextIndex = rf.commitIndex
+		for index := args.PrevLogIndex - 1; index > rf.commitIndex; index-- {
+			if rf.log[index].Term != rf.log[args.PrevLogIndex].Term {
+				reply.NextIndex = index + 1
+				break
+			}
+		}
 		rf.log = rf.log[:args.PrevLogIndex]
 		reply.Term = rf.currentTerm
 		reply.Success = false
@@ -454,7 +463,11 @@ func (rf *Raft) Heartbeat() {
 							rf.UpdateCommitIndex()
 						} else {
 							if reply.Term == Args.Term {
-								rf.nextIndex[i]--
+								if reply.NextIndex == 0 {
+									rf.nextIndex[i]--
+								} else {
+									rf.nextIndex[i] = reply.NextIndex
+								}
 								DPrintf("[%d:%d] Try new nextIndex %d for %d Pre [%d:%d]",
 									rf.me, rf.currentTerm, rf.nextIndex[i], i, rf.nextIndex[i]-1, rf.log[rf.nextIndex[i]-1].Term)
 							} else if reply.Term > Args.Term {
