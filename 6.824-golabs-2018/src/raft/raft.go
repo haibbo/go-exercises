@@ -190,8 +190,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// discard out of date AppendEntries
 	DPrintf("[%d:%d] Recv AppendEntries with %d log\n", rf.me, rf.currentTerm, len(args.Entries))
 	rf.mu.Lock()
-	defer rf.persist()
 	defer rf.mu.Unlock()
+	defer rf.persist()
 
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
@@ -283,8 +283,8 @@ type RequestVoteReply struct {
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
 	rf.mu.Lock()
-	defer rf.persist()
 	defer rf.mu.Unlock()
+	defer rf.persist()
 	reply.VoteGranted = false
 	DPrintf("[%d:%d] Recv RequestVote from %d Term: %d\n", rf.me, rf.currentTerm, args.CandidateID, args.Term)
 	if args.Term < rf.currentTerm {
@@ -376,8 +376,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		return index, term, false
 	}
 	rf.mu.Lock()
-	defer rf.persist()
 	defer rf.mu.Unlock()
+	defer rf.persist()
 	log := LogEntry{
 		Term: rf.currentTerm,
 		Cmd:  command,
